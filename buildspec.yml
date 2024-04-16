@@ -5,31 +5,37 @@ phases:
     runtime-versions:
       python: 3.8
     commands:
-      # Install the Amazon Linux Extras repo
-      - yum install -y amazon-linux-extras-1.6.13
+      # Update the APT package index
+      - apt-get update
+      - apt-get install -y wget ca-certificates
 
-      # Enable Postgres 11 (Amazon Linux Extras only works with Python2 in CodeBuild)
-      - PYTHON=python2 amazon-linux-extras enable postgresql11
+      # Add the PostgreSQL GPG key
+      - wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
 
-      # Install PostgreSQL
-      - yum install -y postgresql-11.5 postgresql-server-11.5 libpq-devel-11.5
+      # Add the PostgreSQL repository
+      - echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" | tee /etc/apt/sources.list.d/pgdg.list
 
-      # Initialize a new PostgreSQL database cluster
-      - su postgres -c 'pg_ctl -D /var/lib/pgsql/data -o "--auth-local=trust" initdb'
-      - su postgres -c 'pg_ctl -D /var/lib/pgsql/data start'
+      # Update the APT package index with the new repository
+      - apt-get update
+
+      # Install PostgreSQL 11 and libpq-dev
+      - apt-get install -y postgresql-11 libpq-dev
+
+      # Initialize PostgreSQL service
+      - sudo -u postgres pg_ctlcluster 11 main start
 
       # Allows the database time to start up
       - sleep 5
 
       # Create a new PostgreSQL user and database for Django
-      - su postgres -c 'createuser ec2djangouser -s'
-      - su postgres -c 'createdb -O ec2djangouser ec2djangodb'
+      - sudo -u postgres createuser ec2djangouser -s
+      - sudo -u postgres createdb -O ec2djangouser ec2djangodb
 
       # Install gcc
-      - yum install -y gcc-7.3.1
+      - apt-get install -y gcc
 
       # Update pip
-      - python3.8 -m pip install --upgrade pip==21.0.1
+      - python3.8 -m pip install --upgrade pip
 
       # Install pip packages
       - python3.8 -m pip install -r requirements/common.txt
@@ -41,8 +47,7 @@ phases:
 
   post_build:
     commands:
-      # Do not remove this statement. This command is required for AWS CodeStar projects.
-      # Update the AWS Partition, AWS Region, account ID and project ID in the project ARN in template-configuration.json file so AWS CloudFormation can tag project resources.
+      # Update the AWS Partition, AWS Region, account ID, and project ID in the project ARN in the template-configuration.json file so AWS CloudFormation can tag project resources
       - sed -i.bak 's/\$PARTITION\$/'${PARTITION}'/g;s/\$AWS_REGION\$/'${AWS_REGION}'/g;s/\$ACCOUNT_ID\$/'${ACCOUNT_ID}'/g;s/\$PROJECT_ID\$/'${PROJECT_ID}'/g' template-configuration.json
 
 artifacts:
